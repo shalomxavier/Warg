@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Human Detection</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@700&display=swap" rel="stylesheet">
+</head>
+<body style="background-image: url('{{ url_for('static', filename='normal_background.jpg') }}');">
+    <h1 class="main-title">Warg - Intruder Detection and Alert System</h1>
+
+    <div class="container">
+        <div class="controls">
+            <!-- Detection Toggle Switch -->
+            <label class="switch">
+                <input type="checkbox" id="detectionSwitch"> <!-- Set to off by default -->
+                <span class="slider"></span>
+            </label>
+            <span class="toggle-label">Detection On/Off</span>
+
+            <!-- Alarm Toggle Switch -->
+            <label class="switch">
+                <input type="checkbox" id="alarmSwitch"> <!-- Set to off by default -->
+                <span class="slider"></span>
+            </label>
+            <span class="toggle-label">Alarm On/Off</span>
+
+            <!-- SMS Toggle Switch -->
+            <label class="switch">
+                <input type="checkbox" id="smsSwitch">
+                <span class="slider"></span>
+            </label>
+            <span class="toggle-label">SMS Alert On/Off</span>
+        </div>
+
+        <div class="video-container">
+            <img src="{{ url_for('video_feed') }}" class="video">
+        </div>
+        
+        <div id="memberCountDisplay">0 persons were detected in the camera</div>
+    </div>
+
+    <script>
+        let detectionEnabled = false; // Set to off by default
+        let alarmEnabled = false;
+        let smsEnabled = false;
+
+        let backgroundTimeout;
+        function updateBackground(imageUrl) {
+            clearTimeout(backgroundTimeout);
+            backgroundTimeout = setTimeout(() => {
+                document.body.style.backgroundImage = `url('${imageUrl}')`;
+            }, 200);
+        }
+
+        // Initialize states from server on page load
+        async function initializeStates() {
+            try {
+                const response = await fetch('/get_states');
+                const states = await response.json();
+                
+                detectionEnabled = states.detection_enabled;
+                alarmEnabled = states.alarm_enabled;
+                smsEnabled = states.sms_enabled;
+                
+                document.getElementById("detectionSwitch").checked = detectionEnabled;
+                document.getElementById("alarmSwitch").checked = alarmEnabled;
+                document.getElementById("smsSwitch").checked = smsEnabled;
+                
+                // Update initial UI state
+                if (!detectionEnabled) {
+                    document.getElementById("memberCountDisplay").style.display = "none";
+                }
+            } catch (error) {
+                console.error("Error initializing states:", error);
+            }
+        }
+
+        // Call initialization on page load
+        window.addEventListener('load', initializeStates);
+
+        function updateMemberCount() {
+            if (!detectionEnabled) {
+                document.body.style.backgroundImage = "url('{{ url_for('static', filename='normal_background.jpg') }}')";
+                document.getElementById("memberCountDisplay").style.display = "none";
+                return;
+            }
+
+            fetch('/member_count')
+                .then(response => response.json())
+                .then(data => {
+                    const countDisplay = document.getElementById("memberCountDisplay");
+                    countDisplay.style.display = "block";
+                    countDisplay.innerText = `${data.member_count} persons were detected in the camera`;
+
+                    if (data.member_count > 0) {
+                        document.body.style.backgroundImage = "url('{{ url_for('static', filename='detected_background.jpg') }}')";
+                    } else {
+                        document.body.style.backgroundImage = "url('{{ url_for('static', filename='normal_background.jpg') }}')";
+                    }
+                })
+                .catch(error => console.error("Error fetching member count:", error));
+        }
+
+        document.getElementById("detectionSwitch").addEventListener("change", function() {
+            detectionEnabled = this.checked;
+            fetch('/toggle_detection', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: detectionEnabled })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!detectionEnabled) {
+                    document.body.style.backgroundImage = "url('{{ url_for('static', filename='normal_background.jpg') }}')";
+                    document.getElementById("memberCountDisplay").style.display = "none";
+                }
+            })
+            .catch(error => console.error("Error toggling detection:", error));
+        });
+
+        document.getElementById("alarmSwitch").addEventListener("change", function() {
+            alarmEnabled = this.checked;
+            fetch('/toggle_alarm', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: alarmEnabled })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log("Alarm enabled:", data.alarm_enabled);
+            })
+            .catch(error => console.error("Error toggling alarm:", error));
+        });
+
+        document.getElementById("smsSwitch").addEventListener("change", function() {
+            smsEnabled = this.checked;
+            fetch('/toggle_sms', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: smsEnabled })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log("SMS enabled:", data.sms_enabled);
+            })
+            .catch(error => console.error("Error toggling SMS:", error));
+        });
+
+        setInterval(updateMemberCount, 2000);
+    </script>
+</body>
+</html>
